@@ -1,0 +1,274 @@
+openapi: 3.0.3
+info:
+  title: Hospital Information Service API
+  description: |
+    Middleware API for hospital staff to authenticate and search patient
+    information across hospital systems.
+
+    If a patient is not found locally, the middleware may fetch data from
+    external hospital APIs.
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8088/api/v1
+    description: Local development server
+
+components:
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+
+    AuthResult:
+      type: object
+      properties:
+        staff_id:
+          type: integer
+        username:
+          type: string
+        hospital_id:
+          type: integer
+        hospital:
+          type: string
+        token:
+          type: string
+
+    Patient:
+      type: object
+      properties:
+        id:
+          type: integer
+        hospital_id:
+          type: integer
+        first_name_th:
+          type: string
+          nullable: true
+        middle_name_th:
+          type: string
+          nullable: true
+        last_name_th:
+          type: string
+          nullable: true
+        first_name_en:
+          type: string
+          nullable: true
+        middle_name_en:
+          type: string
+          nullable: true
+        last_name_en:
+          type: string
+          nullable: true
+        date_of_birth:
+          type: string
+          format: date-time
+          nullable: true
+        patient_hn:
+          type: string
+          nullable: true
+        national_id:
+          type: string
+          nullable: true
+        passport_id:
+          type: string
+          nullable: true
+        phone_number:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        gender:
+          type: string
+          enum: [M, F]
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    PatientSearchResponse:
+      type: object
+      properties:
+        patients:
+          type: array
+          items:
+            $ref: '#/components/schemas/Patient'
+        count:
+          type: integer
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+
+paths:
+
+  /health:
+    get:
+      summary: Health check
+      description: Check application and database health.
+      responses:
+        '200':
+          description: Service healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  db:
+                    type: string
+                    example: up
+        '503':
+          description: Service unhealthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: unhealthy
+                  db:
+                    type: string
+                    example: down
+
+  /staff/create:
+    post:
+      summary: Create staff account
+      description: Register a new staff account and return JWT token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - username
+                - password
+                - hospital
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+                  minLength: 8
+                hospital:
+                  type: string
+      responses:
+        '201':
+          description: Staff created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResult'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Staff already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+
+  /staff/login:
+    post:
+      summary: Login staff
+      description: Authenticate staff and return JWT token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - username
+                - password
+                - hospital
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+                hospital:
+                  type: string
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResult'
+        '400':
+          description: Invalid request
+        '401':
+          description: Invalid credentials
+        '500':
+          description: Internal server error
+
+  /patient/search:
+    post:
+      summary: Search patients
+      description: |
+        Search patients within the authenticated staff's hospital.
+
+        - All fields are optional
+        - Empty request returns up to 100 patients
+        - Name fields support partial matching
+        - If no result found and ID is provided, middleware will query external hospital API
+      security:
+        - BearerAuth: []
+
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                national_id:
+                  type: string
+                passport_id:
+                  type: string
+                first_name:
+                  type: string
+                middle_name:
+                  type: string
+                last_name:
+                  type: string
+                date_of_birth:
+                  type: string
+                  format: date
+                phone_number:
+                  type: string
+                email:
+                  type: string
+
+      responses:
+        '200':
+          description: Patients found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PatientSearchResponse'
+        '400':
+          description: Invalid request body
+        '401':
+          description: Unauthorized
+        '500':
+          description: Failed to search patients
