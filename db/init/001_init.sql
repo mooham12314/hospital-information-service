@@ -36,3 +36,8 @@ CREATE TABLE IF NOT EXISTS patients (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT chk_gender CHECK (gender IN ('M', 'F') OR gender IS NULL)
 );
+
+CREATE INDEX IF NOT EXISTS idx_staff_hospital_id ON staff (hospital_id);
+CREATE INDEX IF NOT EXISTS idx_patients_hospital_id ON patients (hospital_id);
+CREATE INDEX IF NOT EXISTS idx_patients_national_id ON patients (national_id);
+CREATE INDEX IF NOT EXISTS idx_patients_passport_id ON patients (passport_id);
