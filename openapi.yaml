@@ -10,8 +10,10 @@ info:
   version: 1.0.0
 
 servers:
-  - url: http://localhost:8088/api/v1
-    description: Local development server
+  - url: http://localhost:8088
+    description: Local development server (via Nginx)
+  - url: http://localhost:8080
+    description: Direct Go application server
 
 components:
 
@@ -20,193 +22,379 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+      description: JWT token obtained from staff login or creation
 
   schemas:
 
+    HealthResponse:
+      type: object
+      required:
+        - status
+        - db
+      properties:
+        status:
+          type: string
+          enum: [ok, unhealthy]
+          description: Overall service status
+        db:
+          type: string
+          enum: [up, down]
+          description: Database connectivity status
+
+    CreateStaffRequest:
+      type: object
+      required:
+        - username
+        - password
+        - hospital
+      properties:
+        username:
+          type: string
+          description: Unique username within the hospital
+          example: alice@HOSPITAL_A
+        password:
+          type: string
+          format: password
+          minLength: 8
+          description: Password (minimum 8 characters)
+          example: password123
+        hospital:
+          type: string
+          description: Hospital code identifier
+          example: HOSPITAL_A
+
+    LoginStaffRequest:
+      type: object
+      required:
+        - username
+        - password
+        - hospital
+      properties:
+        username:
+          type: string
+          description: Staff username
+          example: alice@HOSPITAL_A
+        password:
+          type: string
+          format: password
+          description: Staff password
+          example: password123
+        hospital:
+          type: string
+          description: Hospital code identifier
+          example: HOSPITAL_A
+
     AuthResult:
       type: object
+      required:
+        - staff_id
+        - username
+        - hospital_id
+        - hospital
+        - token
       properties:
         staff_id:
           type: integer
+          format: int64
+          description: Unique staff ID
+          example: 1
         username:
           type: string
+          description: Staff username
+          example: alice@HOSPITAL_A
         hospital_id:
           type: integer
+          format: int64
+          description: Hospital ID
+          example: 1
         hospital:
           type: string
+          description: Hospital code
+          example: HOSPITAL_A
         token:
           type: string
+          description: JWT access token (valid for 60 minutes)
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+    PatientSearchRequest:
+      type: object
+      description: All fields are optional. At least one criterion recommended.
+      properties:
+        national_id:
+          type: string
+          description: Thai national ID (13 digits)
+          example: '1234567890123'
+          nullable: true
+        passport_id:
+          type: string
+          description: Passport number
+          example: AB1234567
+          nullable: true
+        first_name:
+          type: string
+          description: First name (partial matching, case-insensitive)
+          example: John
+          nullable: true
+        middle_name:
+          type: string
+          description: Middle name (partial matching)
+          example: Michael
+          nullable: true
+        last_name:
+          type: string
+          description: Last name (partial matching, case-insensitive)
+          example: Doe
+          nullable: true
+        date_of_birth:
+          type: string
+          format: date
+          description: Date of birth (YYYY-MM-DD)
+          example: '1990-01-15'
+          nullable: true
+        phone_number:
+          type: string
+          description: Phone number
+          example: '0812345678'
+          nullable: true
+        email:
+          type: string
+          format: email
+          description: Email address
+          example: patient@example.com
+          nullable: true
 
     Patient:
       type: object
+      required:
+        - id
+        - hospital_id
+        - created_at
+        - updated_at
       properties:
         id:
           type: integer
+          format: int64
+          description: Patient ID
+          example: 1
         hospital_id:
           type: integer
+          format: int64
+          description: Hospital ID
+          example: 1
+        patient_hn:
+          type: string
+          description: Hospital Number (HN)
+          example: HN001234
+          nullable: true
+        national_id:
+          type: string
+          description: Thai national ID
+          example: '1234567890123'
+          nullable: true
+        passport_id:
+          type: string
+          description: Passport number
+          example: AB1234567
+          nullable: true
         first_name_th:
           type: string
+          description: First name in Thai
+          example: สมชาย
           nullable: true
         middle_name_th:
           type: string
+          description: Middle name in Thai
           nullable: true
         last_name_th:
           type: string
+          description: Last name in Thai
+          example: ใจดี
           nullable: true
         first_name_en:
           type: string
+          description: First name in English
+          example: Somchai
           nullable: true
         middle_name_en:
           type: string
+          description: Middle name in English
           nullable: true
         last_name_en:
           type: string
+          description: Last name in English
+          example: Jaidee
           nullable: true
         date_of_birth:
           type: string
           format: date-time
-          nullable: true
-        patient_hn:
-          type: string
-          nullable: true
-        national_id:
-          type: string
-          nullable: true
-        passport_id:
-          type: string
+          description: Date of birth
+          example: '1990-01-15T00:00:00Z'
           nullable: true
         phone_number:
           type: string
+          description: Phone number
+          example: '0812345678'
           nullable: true
         email:
           type: string
+          format: email
+          description: Email address
+          example: patient@example.com
           nullable: true
         gender:
           type: string
-          enum: [M, F]
+          enum: [M, F, O]
+          description: Gender (M=Male, F=Female, O=Other)
+          example: M
           nullable: true
         created_at:
           type: string
           format: date-time
+          description: Record creation timestamp
+          example: '2024-01-01T10:00:00Z'
         updated_at:
           type: string
           format: date-time
+          description: Record last update timestamp
+          example: '2024-01-01T10:00:00Z'
 
     PatientSearchResponse:
       type: object
+      required:
+        - patients
+        - count
       properties:
         patients:
           type: array
           items:
             $ref: '#/components/schemas/Patient'
+          description: List of matching patients
         count:
           type: integer
+          description: Total number of patients found
+          example: 1
 
     ErrorResponse:
       type: object
+      required:
+        - error
       properties:
         error:
           type: string
+          description: Error message
+          example: invalid request body
+
+tags:
+  - name: Health
+    description: Health check operations
+  - name: Authentication
+    description: Staff authentication and registration
+  - name: Patients
+    description: Patient search operations (requires authentication)
 
 paths:
 
   /health:
     get:
-      summary: Health check
-      description: Check application and database health.
+      tags:
+        - Health
+      summary: Health check endpoint
+      description: Check service and database connectivity status
+      operationId: getHealth
       responses:
         '200':
-          description: Service healthy
+          description: Service is healthy
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    example: ok
-                  db:
-                    type: string
-                    example: up
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: ok
+                db: up
         '503':
-          description: Service unhealthy
+          description: Service unavailable (database down)
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    example: unhealthy
-                  db:
-                    type: string
-                    example: down
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: unhealthy
+                db: down
 
-  /staff/create:
+  /api/v1/staff/create:
     post:
+      tags:
+        - Authentication
       summary: Create staff account
-      description: Register a new staff account and return JWT token.
+      description: |
+        Register a new staff member and receive JWT token.
+        Username must be unique within the hospital.
+      operationId: createStaff
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required:
-                - username
-                - password
-                - hospital
-              properties:
-                username:
-                  type: string
-                password:
-                  type: string
-                  minLength: 8
-                hospital:
-                  type: string
+              $ref: '#/components/schemas/CreateStaffRequest'
+            example:
+              username: alice@HOSPITAL_A
+              password: password123
+              hospital: HOSPITAL_A
       responses:
         '201':
-          description: Staff created
+          description: Staff account created successfully
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/AuthResult'
+              example:
+                staff_id: 1
+                username: alice@HOSPITAL_A
+                hospital_id: 1
+                hospital: HOSPITAL_A
+                token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
         '400':
-          description: Invalid input
+          description: Invalid input (missing fields or password too short)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: username, password(min 8), and hospital are required
         '409':
-          description: Staff already exists
+          description: Staff already exists in this hospital
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: staff already exists in this hospital
         '500':
           description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: failed to create staff
 
-  /staff/login:
+  /api/v1/staff/login:
     post:
-      summary: Login staff
-      description: Authenticate staff and return JWT token.
+      tags:
+        - Authentication
+      summary: Staff login
+      description: Authenticate staff member and receive JWT token valid for 60 minutes
+      operationId: loginStaff
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required:
-                - username
-                - password
-                - hospital
-              properties:
-                username:
-                  type: string
-                password:
-                  type: string
-                hospital:
-                  type: string
+              $ref: '#/components/schemas/LoginStaffRequest'
+            example:
+              username: alice@HOSPITAL_A
+              password: password123
+              hospital: HOSPITAL_A
       responses:
         '200':
           description: Login successful
@@ -214,61 +402,116 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AuthResult'
+              example:
+                staff_id: 1
+                username: alice@HOSPITAL_A
+                hospital_id: 1
+                hospital: HOSPITAL_A
+                token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
         '400':
-          description: Invalid request
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: username, password(min 8), and hospital are required
         '401':
           description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: invalid username/password/hospital
         '500':
           description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: failed to login
 
-  /patient/search:
+  /api/v1/patient/search:
     post:
+      tags:
+        - Patients
       summary: Search patients
       description: |
         Search patients within the authenticated staff's hospital.
-
-        - All fields are optional
-        - Empty request returns up to 100 patients
-        - Name fields support partial matching
-        - If no result found and ID is provided, middleware will query external hospital API
+        If not found locally, may fetch from external hospital APIs (e.g., Hospital A).
+        All search criteria are optional and support partial matching.
+      operationId: searchPatients
       security:
         - BearerAuth: []
-
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                national_id:
-                  type: string
-                passport_id:
-                  type: string
-                first_name:
-                  type: string
-                middle_name:
-                  type: string
-                last_name:
-                  type: string
-                date_of_birth:
-                  type: string
-                  format: date
-                phone_number:
-                  type: string
-                email:
-                  type: string
-
+              $ref: '#/components/schemas/PatientSearchRequest'
+            examples:
+              searchByNationalID:
+                summary: Search by National ID
+                value:
+                  national_id: '1234567890123'
+              searchByName:
+                summary: Search by name
+                value:
+                  first_name: John
+                  last_name: Doe
+              searchMultipleCriteria:
+                summary: Search with multiple criteria
+                value:
+                  first_name: John
+                  date_of_birth: '1990-01-15'
+                  phone_number: '0812345678'
       responses:
         '200':
-          description: Patients found
+          description: Search completed successfully
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/PatientSearchResponse'
+              example:
+                patients:
+                  - id: 1
+                    hospital_id: 1
+                    patient_hn: HN001234
+                    national_id: '1234567890123'
+                    first_name_th: สมชาย
+                    last_name_th: ใจดี
+                    first_name_en: Somchai
+                    last_name_en: Jaidee
+                    date_of_birth: '1990-01-15T00:00:00Z'
+                    phone_number: '0812345678'
+                    email: somchai@example.com
+                    gender: M
+                    created_at: '2024-01-01T10:00:00Z'
+                    updated_at: '2024-01-01T10:00:00Z'
+                count: 1
         '400':
           description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: invalid request body
         '401':
-          description: Unauthorized
+          description: Unauthorized (missing or invalid JWT token)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: unauthorized
         '500':
-          description: Failed to search patients
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: failed to search patients
